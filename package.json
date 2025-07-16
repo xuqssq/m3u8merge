@@ -1,0 +1,82 @@
+{
+  "name": "m3u8merge",
+  "version": "2.0.3",
+  "description": "Merge m3u8 to video",
+  "keywords": [
+    "Merge m3u8 to video"
+  ],
+  "author": "Qian <xuqssq@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xuqssq/m3u8merge.git"
+  },
+  "license": "MIT",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "*": [
+        "./dist/*",
+        "./dist/index.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "m3u8merge": "scripts/get_video.mjs"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "node --watch-path=src dist/index.cjs",
+    "release": "nrm use npm && npm publish",
+    "lint": "eslint . --ext .js,.ts",
+    "lint:fix": "eslint . --ext .js,.ts --fix",
+    "build": "unbuild",
+    "build:dev": "unbuild --stub --watch",
+    "prepare": "simple-git-hooks",
+    "m3u8merge": "node scripts/get_video.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.14",
+    "@typescript-eslint/eslint-plugin": "^7.2.0",
+    "@typescript-eslint/parser": "^7.2.0",
+    "eslint": "^8.57.0",
+    "lint-staged": "^15.2.2",
+    "nrm": "^1.2.6",
+    "simple-git-hooks": "^2.11.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2",
+    "unbuild": "^2.0.0"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm lint-staged"
+  },
+  "lint-staged": {
+    "*.{js,ts}": "eslint --fix"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "cross-spawn": "^7.0.6",
+    "fs-extra": "^11.2.0",
+    "node-fetch": "^2.7.0",
+    "node-persist": "^4.0.1",
+    "p-limit": "^6.2.0",
+    "path": "^0.12.7",
+    "process": "^0.11.10",
+    "stream": "^0.0.3",
+    "undici": "^7.11.0"
+  }
+}
