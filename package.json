@@ -1,9 +1,26 @@
 {
   "name": "m3u8merge",
-  "version": "2.0.3",
-  "description": "Merge m3u8 to video",
+  "version": "2.0.4",
+  "description": "A powerful and lightweight SDK for merging M3U8 playlist streams into complete video files. Supports HLS stream parsing, segment downloading, and seamless video concatenation with progress tracking.",
   "keywords": [
-    "Merge m3u8 to video"
+    "m3u8",
+    "hls",
+    "video-merge",
+    "stream-download",
+    "playlist",
+    "video-processing",
+    "ffmpeg",
+    "streaming",
+    "video-converter",
+    "ts-segments",
+    "live-stream",
+    "video-downloader",
+    "media-processing",
+    "http-live-streaming",
+    "segment-merger",
+    "video-concatenation",
+    "stream-parser",
+    "media-downloader"
   ],
   "author": "Qian <xuqssq@gmail.com>",
   "repository": {
@@ -40,30 +57,16 @@
     "start": "tsx src/index.ts",
     "dev": "node --watch-path=src dist/index.cjs",
     "release": "nrm use npm && npm publish",
-    "lint": "eslint . --ext .js,.ts",
-    "lint:fix": "eslint . --ext .js,.ts --fix",
     "build": "unbuild",
     "build:dev": "unbuild --stub --watch",
-    "prepare": "simple-git-hooks",
     "m3u8merge": "node scripts/get_video.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.14",
-    "@typescript-eslint/eslint-plugin": "^7.2.0",
-    "@typescript-eslint/parser": "^7.2.0",
-    "eslint": "^8.57.0",
-    "lint-staged": "^15.2.2",
     "nrm": "^1.2.6",
-    "simple-git-hooks": "^2.11.0",
     "tsx": "^4.7.1",
     "typescript": "^5.4.2",
     "unbuild": "^2.0.0"
-  },
-  "simple-git-hooks": {
-    "pre-commit": "pnpm lint-staged"
-  },
-  "lint-staged": {
-    "*.{js,ts}": "eslint --fix"
   },
   "engines": {
     "node": ">=18.0.0"
