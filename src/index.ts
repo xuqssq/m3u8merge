@@ -16,6 +16,30 @@ export interface EncryptionInfo {
   iv?: string;
 }
 
+export interface DownloadResult {
+  index: number;
+  success: boolean;
+  fileName: string;
+  error?: string;
+  bytesDownloaded?: number;
+  duration?: number;
+}
+
+// 添加进度回调接口
+export interface ProgressCallback {
+  (progress: {
+    completed: number;
+    total: number;
+    percent: number;
+    successCount: number;
+    failCount: number;
+    totalBytes: number;
+    speed: number;
+    eta: number;
+    successRate: number;
+  }): void;
+}
+
 export interface MergeOptions {
   outputPath: string;
   tempDir: string;
@@ -26,15 +50,7 @@ export interface MergeOptions {
   maxConcurrent?: number;
   retryCount?: number;
   downloadMethod?: "undici" | "curl" | "auto";
-}
-
-export interface DownloadResult {
-  index: number;
-  success: boolean;
-  fileName: string;
-  error?: string;
-  bytesDownloaded?: number;
-  duration?: number;
+  progressCallback?: ProgressCallback; // 添加进度回调
 }
 
 export default class M3U8Parser {
@@ -319,7 +335,7 @@ export default class M3U8Parser {
           const encryptedData = Buffer.concat(chunks);
 
           // 如果需要解密
-          let finalData:any = encryptedData;
+          let finalData: any = encryptedData;
           if (decryptionKey && this.encryptionInfo?.method === "AES-128") {
             finalData = await this.decryptTSData(encryptedData, decryptionKey);
           }
@@ -612,7 +628,8 @@ export default class M3U8Parser {
     tempDir: string,
     maxConcurrent: number = 20,
     retryCount: number = 3,
-    downloadMethod: "undici" | "curl" | "auto" = "auto"
+    downloadMethod: "undici" | "curl" | "auto" = "auto",
+    progressCallback?: ProgressCallback
   ): Promise<DownloadResult[]> {
     fs.ensureDirSync(tempDir);
 
@@ -638,44 +655,76 @@ export default class M3U8Parser {
 
     const limit = pLimit(maxConcurrent);
     const results: DownloadResult[] = [];
-    let completed = 0;
-    let successCount = 0;
-    let failCount = 0;
-    let totalBytes = 0;
-    let currentConcurrency = maxConcurrent;
+
+    // 使用对象来确保引用一致性
+    const progressState = {
+      completed: 0,
+      successCount: 0,
+      failCount: 0,
+      totalBytes: 0,
+      currentConcurrency: maxConcurrent,
+    };
 
     const startTime = Date.now();
 
-    // 实时进度和性能监控
-    const progressInterval = setInterval(() => {
+    // 更新进度的函数
+    const updateProgress = () => {
       const elapsed = (Date.now() - startTime) / 1000;
-      const percent = ((completed / this.links.length) * 100).toFixed(1);
-      const speed = completed / elapsed || 0;
+      const percent = parseFloat(
+        ((progressState.completed / this.links.length) * 100).toFixed(1)
+      );
+      const speed = progressState.completed / elapsed || 0;
       const eta =
-        speed > 0 ? Math.floor((this.links.length - completed) / speed) : 0;
-      const successRate = completed > 0 ? successCount / completed : 0;
-      const mbDownloaded = (totalBytes / 1024 / 1024).toFixed(1);
+        speed > 0
+          ? Math.floor((this.links.length - progressState.completed) / speed)
+          : 0;
+      const successRate =
+        progressState.completed > 0
+          ? progressState.successCount / progressState.completed
+          : 0;
+      const mbDownloaded = (progressState.totalBytes / 1024 / 1024).toFixed(1);
 
+      // 控制台输出
       console.log(
-        `📊 进度: ${completed}/${this.links.length} (${percent}%) | 成功率: ${(
-          successRate * 100
-        ).toFixed(1)}% | 速度: ${speed.toFixed(
+        `📊 进度: ${progressState.completed}/${
+          this.links.length
+        } (${percent}%) | 成功率: ${(successRate * 100).toFixed(
+          1
+        )}% | 速度: ${speed.toFixed(
           1
         )}/s | 已下载: ${mbDownloaded}MB | ETA: ${eta}s`
       );
+
+      // 调用回调函数
+      if (progressCallback) {
+        progressCallback({
+          completed: progressState.completed,
+          total: this.links.length,
+          percent,
+          successCount: progressState.successCount,
+          failCount: progressState.failCount,
+          totalBytes: progressState.totalBytes,
+          speed,
+          eta,
+          successRate,
+        });
+      }
 
       // 动态调整并发数
       const newConcurrency = this.adjustConcurrency(
         successRate,
         speed,
-        currentConcurrency
+        progressState.currentConcurrency
       );
-      if (newConcurrency !== currentConcurrency) {
-        currentConcurrency = newConcurrency;
-        console.log(`🔄 调整并发数为: ${currentConcurrency}`);
-        limit.concurrency = currentConcurrency;
+      if (newConcurrency !== progressState.currentConcurrency) {
+        progressState.currentConcurrency = newConcurrency;
+        console.log(`🔄 调整并发数为: ${progressState.currentConcurrency}`);
+        limit.concurrency = progressState.currentConcurrency;
       }
-    }, 3000);
+    };
+
+    // 实时进度和性能监控
+    const progressInterval = setInterval(updateProgress, 2000);
 
     try {
       // 使用 Promise.allSettled 避免单个失败影响全部
@@ -690,23 +739,33 @@ export default class M3U8Parser {
           )
         )
           .then((result) => {
-            completed++;
+            progressState.completed++;
             if (result.success) {
-              successCount++;
+              progressState.successCount++;
               if (result.bytesDownloaded) {
-                totalBytes += result.bytesDownloaded;
+                progressState.totalBytes += result.bytesDownloaded;
               }
             } else {
-              failCount++;
+              progressState.failCount++;
               // 失败时降低并发数
-              if (failCount % 5 === 0 && currentConcurrency > 5) {
-                currentConcurrency = Math.max(currentConcurrency - 2, 5);
-                limit.concurrency = currentConcurrency;
+              if (
+                progressState.failCount % 5 === 0 &&
+                progressState.currentConcurrency > 5
+              ) {
+                progressState.currentConcurrency = Math.max(
+                  progressState.currentConcurrency - 2,
+                  5
+                );
+                limit.concurrency = progressState.currentConcurrency;
                 console.log(
-                  `⚠️ 检测到连续失败，降低并发数为: ${currentConcurrency}`
+                  `⚠️ 检测到连续失败，降低并发数为: ${progressState.currentConcurrency}`
                 );
               }
             }
+
+            // 立即更新进度（不等待定时器）
+            updateProgress();
+
             return result;
           })
           .catch((error) => ({
@@ -737,14 +796,15 @@ export default class M3U8Parser {
     }
 
     const totalTime = Math.floor((Date.now() - startTime) / 1000);
-    const finalSuccessRate = ((successCount / this.links.length) * 100).toFixed(
-      1
-    );
-    const avgSpeed = (successCount / totalTime).toFixed(1);
-    const totalMB = (totalBytes / 1024 / 1024).toFixed(1);
+    const finalSuccessRate = (
+      (progressState.successCount / this.links.length) *
+      100
+    ).toFixed(1);
+    const avgSpeed = (progressState.successCount / totalTime).toFixed(1);
+    const totalMB = (progressState.totalBytes / 1024 / 1024).toFixed(1);
 
     console.log(
-      `\n📊 下载完成! 成功: ${successCount}, 失败: ${failCount}, 总耗时: ${totalTime}s`
+      `\n📊 下载完成! 成功: ${progressState.successCount}, 失败: ${progressState.failCount}, 总耗时: ${totalTime}s`
     );
     console.log(
       `📈 成功率: ${finalSuccessRate}%, 平均速度: ${avgSpeed}/s, 总下载: ${totalMB}MB`
@@ -777,7 +837,8 @@ export default class M3U8Parser {
         options.tempDir,
         options.maxConcurrent || 20,
         options.retryCount || 3,
-        options.downloadMethod || "auto"
+        options.downloadMethod || "auto",
+        options.progressCallback
       );
 
       const successfulDownloads = downloadResults.filter((r) => r.success);

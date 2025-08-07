@@ -8,6 +8,27 @@ interface EncryptionInfo {
     keyUrl?: string;
     iv?: string;
 }
+interface DownloadResult {
+    index: number;
+    success: boolean;
+    fileName: string;
+    error?: string;
+    bytesDownloaded?: number;
+    duration?: number;
+}
+interface ProgressCallback {
+    (progress: {
+        completed: number;
+        total: number;
+        percent: number;
+        successCount: number;
+        failCount: number;
+        totalBytes: number;
+        speed: number;
+        eta: number;
+        successRate: number;
+    }): void;
+}
 interface MergeOptions {
     outputPath: string;
     tempDir: string;
@@ -18,14 +39,7 @@ interface MergeOptions {
     maxConcurrent?: number;
     retryCount?: number;
     downloadMethod?: "undici" | "curl" | "auto";
-}
-interface DownloadResult {
-    index: number;
-    success: boolean;
-    fileName: string;
-    error?: string;
-    bytesDownloaded?: number;
-    duration?: number;
+    progressCallback?: ProgressCallback;
 }
 declare class M3U8Parser {
     links: M3U8Link[];
@@ -50,7 +64,7 @@ declare class M3U8Parser {
     private selectOptimalDownloadMethod;
     private downloadSingleSegment;
     private adjustConcurrency;
-    downloadSegmentsConcurrent(tempDir: string, maxConcurrent?: number, retryCount?: number, downloadMethod?: "undici" | "curl" | "auto"): Promise<DownloadResult[]>;
+    downloadSegmentsConcurrent(tempDir: string, maxConcurrent?: number, retryCount?: number, downloadMethod?: "undici" | "curl" | "auto", progressCallback?: ProgressCallback): Promise<DownloadResult[]>;
     mergeVideos(options: MergeOptions): Promise<boolean>;
     processM3U8ToVideo(outputPath: string, tempDir?: string, options?: Partial<MergeOptions>): Promise<boolean>;
     processFileToVideo(m3u8FilePath: string, outputPath: string, tempDir?: string, options?: Partial<MergeOptions>): Promise<boolean>;
@@ -58,4 +72,4 @@ declare class M3U8Parser {
 }
 
 export { M3U8Parser as default };
-export type { DownloadResult, EncryptionInfo, M3U8Link, MergeOptions };
+export type { DownloadResult, EncryptionInfo, M3U8Link, MergeOptions, ProgressCallback };
