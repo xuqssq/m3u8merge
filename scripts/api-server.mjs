@@ -378,7 +378,7 @@ app.use((req, res) => {
 });
 
 // 启动服务器
-app.listen(PORT, () => {
+app.listen(PORT,'0.0.0.0', () => {
   console.log(`🚀 M3U8 合并 API 服务器已启动`);
   console.log(`📡 监听端口: ${PORT}`);
   console.log(`🌐 API 文档: http://localhost:${PORT}/health`);
