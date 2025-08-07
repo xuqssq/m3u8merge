@@ -7,7 +7,7 @@ import fs from "fs-extra";
 import { v4 as uuidv4 } from "uuid";
 
 const app = express();
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 
 // 中间件配置
 app.use(cors());
