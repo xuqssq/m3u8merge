@@ -33,6 +33,39 @@ const upload = multer({
 // 存储任务状态
 const tasks = new Map();
 
+// 简易任务队列（限制并发的任务执行器）
+const MAX_ACTIVE_TASKS = parseInt(process.env.MAX_ACTIVE_TASKS || "2", 10);
+const pendingQueue = [];
+let activeCount = 0;
+
+function processQueue() {
+  while (activeCount < MAX_ACTIVE_TASKS && pendingQueue.length > 0) {
+    const job = pendingQueue.shift();
+    activeCount++;
+    Promise.resolve()
+      .then(() => job.runner())
+      .catch((err) => {
+        console.error(`Queue job ${job.taskId} failed:`, err);
+      })
+      .finally(() => {
+        activeCount--;
+        processQueue();
+      });
+  }
+}
+
+function enqueueTask(taskId, runner) {
+  const task = tasks.get(taskId);
+  if (task) {
+    task.status = "queued";
+    task.progress = 0;
+    task.message = "排队中...";
+    task.updatedAt = new Date();
+  }
+  pendingQueue.push({ taskId, runner });
+  processQueue();
+}
+
 // 工具函数
 function isHttpUrl(str = "") {
   return str.includes("http://") || str.includes("https://");
@@ -59,6 +92,16 @@ function updateTaskStatus(
       task.error = error;
     }
   }
+}
+
+function resolveOutputPath(fileName, taskId) {
+  const dir = path.join(process.cwd(), "output");
+  fs.ensureDirSync(dir);
+  let finalPath = path.join(dir, `${fileName}.mp4`);
+  if (fs.existsSync(finalPath)) {
+    finalPath = path.join(dir, `${fileName}_${taskId}.mp4`);
+  }
+  return finalPath;
 }
 
 // API 路由
@@ -91,7 +134,7 @@ app.post("/api/process-url", async (req, res) => {
 
     const taskId = generateTaskId();
     const fileName = outputFileName || `video_${taskId}`;
-    const outputPath = path.join(process.cwd(), "output", `${fileName}.mp4`);
+    const outputPath = resolveOutputPath(fileName, taskId);
     const tempDir = path.join(process.cwd(), "temp", taskId);
 
     // 创建任务记录
@@ -107,14 +150,17 @@ app.post("/api/process-url", async (req, res) => {
       updatedAt: new Date(),
     });
 
-    // 异步处理
-    processUrlAsync(taskId, m3u8Url, outputPath, tempDir, options);
+    // 入队，由队列控制并发
+    enqueueTask(taskId, () => processUrlAsync(taskId, m3u8Url, outputPath, tempDir, options));
 
     res.json({
       success: true,
       taskId,
-      message: "任务已创建，开始处理中...",
+      message: "任务已创建，已加入队列...",
       statusUrl: `/api/task/${taskId}`,
+      queue: {
+        maxActive: MAX_ACTIVE_TASKS,
+      },
     });
   } catch (error) {
     res.status(500).json({
@@ -144,7 +190,7 @@ app.post("/api/process-file", upload.single("m3u8File"), async (req, res) => {
 
     const taskId = generateTaskId();
     const fileName = outputFileName || `video_${taskId}`;
-    const outputPath = path.join(process.cwd(), "output", `${fileName}.mp4`);
+    const outputPath = resolveOutputPath(fileName, taskId);
     const tempDir = path.join(process.cwd(), "temp", taskId);
 
     // 创建任务记录
@@ -160,14 +206,17 @@ app.post("/api/process-file", upload.single("m3u8File"), async (req, res) => {
       updatedAt: new Date(),
     });
 
-    // 异步处理
-    processFileAsync(taskId, file.path, outputPath, tempDir, options);
+    // 入队，由队列控制并发
+    enqueueTask(taskId, () => processFileAsync(taskId, file.path, outputPath, tempDir, options));
 
     res.json({
       success: true,
       taskId,
-      message: "任务已创建，开始处理中...",
+      message: "任务已创建，已加入队列...",
       statusUrl: `/api/task/${taskId}`,
+      queue: {
+        maxActive: MAX_ACTIVE_TASKS,
+      },
     });
   } catch (error) {
     res.status(500).json({
@@ -248,6 +297,12 @@ app.delete("/api/task/:taskId", async (req, res) => {
   }
 
   try {
+    // 如果任务在队列中，移除队列项
+    const idx = pendingQueue.findIndex((j) => j.taskId === taskId);
+    if (idx !== -1) {
+      pendingQueue.splice(idx, 1);
+    }
+
     // 清理文件
     if (fs.existsSync(task.output)) {
       await fs.remove(task.output);
@@ -373,7 +428,7 @@ app.use((error, req, res, next) => {
 // 404 处理
 app.use((req, res) => {
   res.status(404).json({
-    error: "接口不存在",
+    error: "?",
   });
 });
 
